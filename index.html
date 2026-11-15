@@ -35,13 +35,13 @@
 <body>
 <div id="app" class="app"><div class="cargador"><img src="iconos/icono-192.png" alt=""><p>Abriendo la hucha…</p></div></div>
 <script>
-// Cargador de La NutriHucha (versión 1). Público: no contiene la app ni datos.
+// Cargador de La NutriHucha (versión 2). Público: no contiene la app ni datos.
 // 1) Pide la clave personal (una vez por móvil). 2) La API, con esa clave, entrega la llave del paquete.
 // 3) Descarga app.json (la app cifrada con AES-256-GCM), la descifra, la guarda en el móvil y la arranca.
 // 4) En cada apertura arranca la copia guardada y busca novedades en segundo plano.
 (function () {
   'use strict';
-  var API_URL = 'https://script.google.com/macros/s/AKfycbyWLtZjkTy9JvjTeajmXFPnFPeybHD9Nbz4w2kfY9hZoc5w1SncC4puwOpkELLpXN0H2A/exec';
+  var API_URL = 'https://script.google.com/macros/s/AKfycbwJvppO7oW1GUWimYPItkli3rr5HjWzLN72OHCLKofGOxEdvm3JnkVbx2vq_RFGRlRV/exec';
   var ALM = { clave: 'nutrihucha.clave', usuario: 'nutrihucha.usuario', llave: 'nutrihucha.llave_paquete' };
   var raiz = document.getElementById('app');
 

@@ -1,7 +1,7 @@
-// Service worker de La NutriHucha (cargador versión 1).
+// Service worker de La NutriHucha (cargador versión 2).
 // Guarda el cargador y las fuentes para abrir al instante y sin conexión. La app (app.json) y
 // version.json van siempre a la red: el cargador ya guarda la app descifrada en el móvil.
-const CACHE = 'nutrihucha-cargador-1';
+const CACHE = 'nutrihucha-cargador-2';
 const BASICOS = ['./', 'index.html', 'manifest.webmanifest', 'iconos/icono-192.png', 'iconos/icono-512.png', 'iconos/icono-maskable.png'];
 
 self.addEventListener('install', function (ev) {
@@ -29,12 +29,14 @@ self.addEventListener('fetch', function (ev) {
     }));
     return;
   }
-  // El cargador: de la caché al instante y se actualiza por detrás.
+  // El cargador: primero la red (para no quedarse con uno viejo) y, sin conexión, la copia guardada.
   if (url.origin === self.location.origin) {
     ev.respondWith(caches.open(CACHE).then(function (c) {
-      return c.match(ev.request, { ignoreSearch: true }).then(function (r) {
-        const red = fetch(ev.request).then(function (resp) { if (resp.ok) c.put(ev.request, resp.clone()); return resp; }).catch(function () { return r; });
-        return r || red;
+      return fetch(ev.request).then(function (resp) {
+        if (resp.ok) c.put(ev.request, resp.clone());
+        return resp;
+      }).catch(function () {
+        return c.match(ev.request, { ignoreSearch: true }).then(function (r) { return r || c.match('index.html'); });
       });
     }));
   }
