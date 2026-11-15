@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#FBF3E8">
+<meta name="robots" content="noindex, nofollow">
+<title>La NutriHucha</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="iconos/icono-192.png">
+<link rel="apple-touch-icon" href="iconos/icono-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700&display=swap">
+<style>
+  /* Pantalla del cargador. La app de verdad llega cifrada y la descifra la clave de la API. */
+  html, body { margin: 0; background: #FBF3E8; color: #3B2A20; font-family: 'Nunito', system-ui, sans-serif; }
+  .cargador { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px 20px; box-sizing: border-box; text-align: center; }
+  .cargador h1 { font-family: 'Fredoka', sans-serif; font-weight: 700; font-size: 32px; margin: 0; }
+  .cargador p { margin: 0; color: #6E5546; font-size: 15px; }
+  .cargador img { width: 120px; height: 120px; border-radius: 28px; animation: bota 2.4s ease-in-out infinite; }
+  .cargador form { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 12px; background: #FFFFFF; border-radius: 24px; padding: 20px; box-shadow: 0 8px 24px rgba(120, 70, 40, 0.08); box-sizing: border-box; text-align: left; }
+  .cargador label { font-weight: 700; font-size: 14px; display: flex; flex-direction: column; gap: 6px; }
+  .cargador input { font: inherit; font-size: 16px; padding: 14px; border-radius: 16px; border: 1.5px solid #EBD9C4; background: #FBF3E8; color: inherit; }
+  .cargador button { min-height: 52px; border-radius: 999px; border: none; background: #A84E2E; color: #FFFFFF; font: inherit; font-weight: 700; font-size: 16px; }
+  .cargador button:disabled { opacity: 0.5; }
+  .cargador .error { background: #F6D9CC; color: #7E3A22; border-radius: 14px; padding: 10px 12px; font-size: 14px; font-weight: 600; }
+  .novedades { position: fixed; left: 16px; right: 16px; bottom: 96px; z-index: 99; display: flex; align-items: center; gap: 10px; background: #3B2A20; color: #FBF3E8; border-radius: 18px; padding: 12px 14px; font-family: 'Nunito', sans-serif; font-weight: 700; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25); max-width: 448px; margin: 0 auto; }
+  .novedades span { flex-grow: 1; }
+  .novedades button { border: none; border-radius: 999px; padding: 8px 14px; background: #FBF3E8; color: #7E3A22; font: inherit; font-weight: 700; }
+  @keyframes bota { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+  @media (prefers-reduced-motion: reduce) { .cargador img { animation: none; } }
+</style>
+</head>
+<body>
+<div id="app" class="app"><div class="cargador"><img src="iconos/icono-192.png" alt=""><p>Abriendo la hucha…</p></div></div>
+<script>
+// Cargador de La NutriHucha (versión 1). Público: no contiene la app ni datos.
+// 1) Pide la clave personal (una vez por móvil). 2) La API, con esa clave, entrega la llave del paquete.
+// 3) Descarga app.json (la app cifrada con AES-256-GCM), la descifra, la guarda en el móvil y la arranca.
+// 4) En cada apertura arranca la copia guardada y busca novedades en segundo plano.
+(function () {
+  'use strict';
+  var API_URL = 'https://script.google.com/macros/s/AKfycbyWLtZjkTy9JvjTeajmXFPnFPeybHD9Nbz4w2kfY9hZoc5w1SncC4puwOpkELLpXN0H2A/exec';
+  var ALM = { clave: 'nutrihucha.clave', usuario: 'nutrihucha.usuario', llave: 'nutrihucha.llave_paquete' };
+  var raiz = document.getElementById('app');
+
+  function leer(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function guardar(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* sin almacenamiento */ } }
+  function olvidar(k) { try { localStorage.removeItem(k); } catch (e) { /* nada */ } }
+  function escapar(t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  // ---------- Copia de la app en el móvil (IndexedDB) ----------
+  function bd() {
+    return new Promise(function (ok, mal) {
+      var r = indexedDB.open('nutrihucha', 1);
+      r.onupgradeneeded = function () { r.result.createObjectStore('app'); };
+      r.onsuccess = function () { ok(r.result); };
+      r.onerror = function () { mal(r.error); };
+    });
+  }
+  function bdLeer() {
+    return bd().then(function (db) {
+      return new Promise(function (ok) {
+        var t = db.transaction('app', 'readonly').objectStore('app').get('paquete');
+        t.onsuccess = function () { ok(t.result || null); };
+        t.onerror = function () { ok(null); };
+      });
+    }).catch(function () { return null; });
+  }
+  function bdGuardar(p) {
+    return bd().then(function (db) {
+      return new Promise(function (ok) {
+        var t = db.transaction('app', 'readwrite');
+        t.objectStore('app').put(p, 'paquete');
+        t.oncomplete = function () { ok(true); };
+        t.onerror = function () { ok(false); };
+      });
+    }).catch(function () { return false; });
+  }
+
+  // ---------- API y descifrado ----------
+  function api(accion, clave) {
+    return fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ accion: accion, clave: clave, datos: {} }) })
+      .then(function (r) { return r.json(); });
+  }
+  function deB64(t) { var s = atob(t); var b = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); return b; }
+  function deHex(h) { var b = new Uint8Array(h.length / 2); for (var i = 0; i < b.length; i++) b[i] = parseInt(h.substr(i * 2, 2), 16); return b; }
+  function descifrar(cifrado, llaveHex) {
+    return crypto.subtle.importKey('raw', deHex(llaveHex), { name: 'AES-GCM' }, false, ['decrypt']).then(function (k) {
+      return crypto.subtle.decrypt({ name: 'AES-GCM', iv: deB64(cifrado.iv) }, k, deB64(cifrado.datos));
+    }).then(function (buf) { return JSON.parse(new TextDecoder().decode(buf)); });
+  }
+  function llave(clave) {
+    var guardada = leer(ALM.llave);
+    if (guardada) return Promise.resolve(guardada);
+    return api('app', clave).then(function (r) {
+      if (!r.ok) { var e = new Error(r.error || 'Error'); e.codigo = r.codigo; throw e; }
+      guardar(ALM.llave, r.datos.clave_paquete);
+      if (r.usuario) guardar(ALM.usuario, r.usuario);
+      return r.datos.clave_paquete;
+    });
+  }
+  function descargar(clave) {
+    return Promise.all([llave(clave), fetch('app.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error('No encuentro la app'); return r.json(); })])
+      .then(function (x) {
+        return descifrar(x[1], x[0]).catch(function () {
+          // La llave guardada no vale (se cambió): se pide otra vez.
+          olvidar(ALM.llave);
+          return llave(clave).then(function (k) { return descifrar(x[1], k); });
+        });
+      })
+      .then(function (p) { return bdGuardar(p).then(function () { return p; }); });
+  }
+
+  // ---------- Arrancar la app ----------
+  var arrancada = false;
+  function ejecutar(p) {
+    arrancada = true;
+    window.NUTRIHUCHA_CARGADOR = { version: p.version, buscarNovedades: buscarNovedades };
+    raiz.innerHTML = '';
+    var st = document.createElement('style');
+    st.textContent = p.css;
+    document.head.appendChild(st);
+    var sc = document.createElement('script');
+    sc.textContent = p.js;
+    document.body.appendChild(sc);
+  }
+
+  function avisoNovedades() {
+    if (document.querySelector('.novedades')) return;
+    var d = document.createElement('div');
+    d.className = 'novedades';
+    d.setAttribute('role', 'status');
+    d.innerHTML = '<span>Hay novedades en la NutriHucha</span><button type="button">Actualizar</button>';
+    d.querySelector('button').addEventListener('click', function () { location.reload(); });
+    document.body.appendChild(d);
+  }
+
+  function buscarNovedades(version) {
+    var clave = leer(ALM.clave);
+    if (!clave) return Promise.resolve(false);
+    return fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (v) {
+      if (!(v.version > version)) return false;
+      return descargar(clave).then(function () { if (arrancada) avisoNovedades(); return true; });
+    }).catch(function () { return false; });
+  }
+
+  function pantallaClave(error) {
+    raiz.innerHTML = '<main class="cargador"><img src="iconos/icono-192.png" alt="">' +
+      '<div><h1>La NutriHucha</h1><p>Pon tu clave personal. Solo hace falta una vez en cada móvil.</p></div>' +
+      '<form id="f" novalidate><label>Tu clave<input id="clave" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" required></label>' +
+      (error ? '<div class="error" role="alert">' + escapar(error) + '</div>' : '') +
+      '<button type="submit" id="entrar" disabled>Entrar</button></form></main>';
+    var campo = document.getElementById('clave');
+    var boton = document.getElementById('entrar');
+    campo.addEventListener('input', function () { boton.disabled = !campo.value.trim(); });
+    document.getElementById('f').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var clave = campo.value.trim();
+      if (!clave) return;
+      boton.disabled = true;
+      boton.textContent = 'Abriendo…';
+      olvidar(ALM.llave);
+      descargar(clave).then(function (p) {
+        guardar(ALM.clave, clave);
+        ejecutar(p);
+      }).catch(function (e) {
+        pantallaClave(e.codigo === 'ACCESO_DENEGADO' ? 'Esa clave no es correcta. Revísala y vuelve a probar.'
+          : navigator.onLine === false ? 'No hay conexión. La primera vez hace falta internet.' : 'No he podido abrir la app: ' + (e.message || e));
+      });
+    });
+    setTimeout(function () { campo.focus(); }, 60);
+  }
+
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    try { navigator.serviceWorker.register('sw.js'); } catch (e) { /* sin modo sin conexión */ }
+  }
+
+  var clave = leer(ALM.clave);
+  bdLeer().then(function (p) {
+    if (clave && p) {
+      ejecutar(p);
+      setTimeout(function () { buscarNovedades(p.version); }, 2500);
+    } else if (clave) {
+      descargar(clave).then(ejecutar).catch(function (e) {
+        if (e.codigo === 'ACCESO_DENEGADO') { olvidar(ALM.clave); pantallaClave('Tu clave ya no vale (puede que se haya cambiado). Pon la nueva.'); }
+        else pantallaClave(navigator.onLine === false ? 'No hay conexión. La primera vez hace falta internet.' : 'No he podido abrir la app: ' + (e.message || e));
+      });
+    } else {
+      pantallaClave();
+    }
+  });
+})();
+</script>
+</body>
+</html>
